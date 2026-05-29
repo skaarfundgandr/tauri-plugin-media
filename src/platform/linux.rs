@@ -8,6 +8,12 @@ use dbus::blocking::Connection;
 use dbus_crossroads::{Crossroads, IfaceBuilder, IfaceToken};
 #[cfg(target_os = "linux")]
 use std::collections::HashMap;
+#[cfg(target_os = "linux")]
+use dbus::channel::Sender;
+#[cfg(target_os = "linux")]
+use dbus::blocking::generated_org_freedesktop_dbus::DBus;
+#[cfg(target_os = "linux")]
+use dbus::arg::Variant;
 
 pub struct LinuxMediaController {
     #[cfg(target_os = "linux")]
@@ -54,9 +60,9 @@ impl LinuxMediaController {
                 move |_, _| Ok(app_name.clone())
             });
             b.property("SupportedUriSchemes")
-                .get(|_, _| Ok(vec!["file", "http", "https"]));
+                .get(|_, _| Ok(vec!["file".to_string(), "http".to_string(), "https".to_string()]));
             b.property("SupportedMimeTypes")
-                .get(|_, _| Ok(vec!["audio/mpeg", "audio/mp4", "audio/ogg"]));
+                .get(|_, _| Ok(vec!["audio/mpeg".to_string(), "audio/mp4".to_string(), "audio/ogg".to_string()]));
         });
 
         // MediaPlayer2.Player interface
@@ -171,7 +177,13 @@ impl LinuxMediaController {
 
                 b.property("Metadata").get({
                     let metadata = self.create_metadata_dict();
-                    move |_, _| Ok(metadata.clone())
+                    move |_, _| {
+                        let cloned = metadata
+                            .iter()
+                            .map(|(k, v)| (k.clone(), Variant(v.0.box_clone())))
+                            .collect();
+                        Ok(cloned)
+                    }
                 });
 
                 b.property("Volume")
@@ -359,10 +371,10 @@ impl super::MediaController for LinuxMediaController {
                 changed.insert("PlaybackStatus", dbus::arg::Variant(status));
                 changed.insert(
                     "Position",
-                    dbus::arg::Variant((info.position * 1_000_000.0) as i64),
+                    dbus::arg::Variant::<i64>((info.position * 1_000_000.0) as i64),
                 );
-                changed.insert("Rate", dbus::arg::Variant(info.playback_rate));
-                changed.insert("Shuffle", dbus::arg::Variant(info.shuffle));
+                changed.insert("Rate", dbus::arg::Variant::<f64>(info.playback_rate));
+                changed.insert("Shuffle", dbus::arg::Variant::<bool>(info.shuffle));
 
                 let loop_status = match info.repeat_mode {
                     RepeatMode::None => "None",
